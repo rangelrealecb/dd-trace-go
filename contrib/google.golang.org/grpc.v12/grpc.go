@@ -9,7 +9,6 @@
 package grpc // import "gopkg.in/DataDog/dd-trace-go.v1/contrib/google.golang.org/grpc.v12"
 
 import (
-	"math"
 	"net"
 
 	"gopkg.in/DataDog/dd-trace-go.v1/contrib/google.golang.org/internal/grpcutil"
@@ -40,24 +39,21 @@ func UnaryServerInterceptor(opts ...InterceptorOption) grpc.UnaryServerIntercept
 	}
 	log.Debug("contrib/google.golang.org/grpc.v12: Configuring UnaryServerInterceptor: %#v", cfg)
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		span, ctx := startSpanFromContext(ctx, info.FullMethod, cfg.serviceName, cfg.analyticsRate)
+		span, ctx := startSpanFromContext(ctx, info.FullMethod, cfg.serviceName, cfg.spanOpts...)
 		resp, err := handler(ctx, req)
 		span.Finish(tracer.WithError(err))
 		return resp, err
 	}
 }
 
-func startSpanFromContext(ctx context.Context, method, service string, rate float64) (ddtrace.Span, context.Context) {
-	opts := []ddtrace.StartSpanOption{
+func startSpanFromContext(ctx context.Context, method, service string, opts ...tracer.StartSpanOption) (ddtrace.Span, context.Context) {
+	opts = append(opts,
 		tracer.ServiceName(service),
 		tracer.ResourceName(method),
 		tracer.Tag(tagMethod, method),
 		tracer.SpanType(ext.AppTypeRPC),
 		tracer.Measured(),
-	}
-	if !math.IsNaN(rate) {
-		opts = append(opts, tracer.Tag(ext.EventSampleRate, rate))
-	}
+	)
 	md, _ := metadata.FromContext(ctx) // nil is ok
 	if sctx, err := tracer.Extract(grpcutil.MDCarrier(md)); err == nil {
 		opts = append(opts, tracer.ChildOf(sctx))
@@ -81,13 +77,11 @@ func UnaryClientInterceptor(opts ...InterceptorOption) grpc.UnaryClientIntercept
 			span ddtrace.Span
 			p    peer.Peer
 		)
-		spanopts := []ddtrace.StartSpanOption{
+		spanopts := cfg.spanOpts
+		spanopts = append(spanopts,
 			tracer.Tag(tagMethod, method),
 			tracer.SpanType(ext.AppTypeRPC),
-		}
-		if !math.IsNaN(cfg.analyticsRate) {
-			spanopts = append(spanopts, tracer.Tag(ext.EventSampleRate, cfg.analyticsRate))
-		}
+		)
 		span, ctx = tracer.StartSpanFromContext(ctx, "grpc.client", spanopts...)
 		md, ok := metadata.FromContext(ctx)
 		if !ok {

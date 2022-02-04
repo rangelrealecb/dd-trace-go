@@ -39,13 +39,13 @@ func (ss *serverStream) Context() context.Context {
 
 func (ss *serverStream) RecvMsg(m interface{}) (err error) {
 	if _, ok := ss.cfg.ignoredMethods[ss.method]; ss.cfg.traceStreamMessages && !ok {
+		ss.cfg.spanOpts = append(ss.cfg.spanOpts, tracer.Measured())
 		span, _ := startSpanFromContext(
 			ss.ctx,
 			ss.method,
 			"grpc.message",
 			ss.cfg.serverServiceName(),
-			tracer.AnalyticsRate(ss.cfg.analyticsRate),
-			tracer.Measured(),
+			ss.cfg.spanOpts...,
 		)
 		defer func() { finishWithError(span, err, ss.cfg) }()
 	}
@@ -55,13 +55,13 @@ func (ss *serverStream) RecvMsg(m interface{}) (err error) {
 
 func (ss *serverStream) SendMsg(m interface{}) (err error) {
 	if _, ok := ss.cfg.ignoredMethods[ss.method]; ss.cfg.traceStreamMessages && !ok {
+		ss.cfg.spanOpts = append(ss.cfg.spanOpts, tracer.Measured())
 		span, _ := startSpanFromContext(
 			ss.ctx,
 			ss.method,
 			"grpc.message",
 			ss.cfg.serverServiceName(),
-			tracer.AnalyticsRate(ss.cfg.analyticsRate),
-			tracer.Measured(),
+			ss.cfg.spanOpts...,
 		)
 		defer func() { finishWithError(span, err, ss.cfg) }()
 	}
@@ -82,13 +82,13 @@ func StreamServerInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 		// if we've enabled call tracing, create a span
 		if _, ok := cfg.ignoredMethods[info.FullMethod]; cfg.traceStreamCalls && !ok {
 			var span ddtrace.Span
+			cfg.spanOpts = append(cfg.spanOpts, tracer.Measured())
 			span, ctx = startSpanFromContext(
 				ctx,
 				info.FullMethod,
 				"grpc.server",
 				cfg.serverServiceName(),
-				tracer.AnalyticsRate(cfg.analyticsRate),
-				tracer.Measured(),
+				cfg.spanOpts...,
 			)
 			switch {
 			case info.IsServerStream && info.IsClientStream:
@@ -127,13 +127,13 @@ func UnaryServerInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 		if _, ok := cfg.ignoredMethods[info.FullMethod]; ok {
 			return handler(ctx, req)
 		}
+		cfg.spanOpts = append(cfg.spanOpts, tracer.Measured())
 		span, ctx := startSpanFromContext(
 			ctx,
 			info.FullMethod,
 			"grpc.server",
 			cfg.serverServiceName(),
-			tracer.AnalyticsRate(cfg.analyticsRate),
-			tracer.Measured(),
+			cfg.spanOpts...,
 		)
 		span.SetTag(tagMethodKind, methodKindUnary)
 
